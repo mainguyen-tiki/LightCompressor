@@ -6,7 +6,7 @@
 LightCompressor can now be used in Flutter through [light_compressor](https://pub.dev/packages/light_compressor) plugin.
 
 A powerful and easy-to-use video compression library for android uses [MediaCodec](https://developer.android.com/reference/android/media/MediaCodec) API. This library generates a compressed MP4 video with a modified width, height, and bitrate (the number of bits per
-seconds that determines the video and audio files’ size and quality). It is based on Telegram for Android source code.
+seconds that determines the video and audio files’ size and quality). It is based on Telegram for Android project.
 
 The general idea of how the library works is that, extreme high bitrate is reduced while maintaining a good video quality resulting in a smaller size.
 
@@ -14,11 +14,18 @@ I would like to mention that the set attributes for size and quality worked just
 
 **LightCompressor is now available in iOS**, have a look at [LightCompressor_iOS](https://github.com/AbedElazizShe/LightCompressor_iOS).
 
-# What's new in 1.0.0
+# What's new in 1.1.1
 
-- Disabling Audio is possible now by passing **disableAudio: true** in Configuration.
-- Bugs fixes.
-
+- **Breaking** srcPath is no longer allowed, only video uri is allowed.
+- **Breaking** You should pass a list of uris now.
+- **Breaking** You should pass the directory you wish to save the output videos in. e.g. saveAt: Environment.DIRECTORY_MOVIES.
+- **Breaking** No need to pass destPath or streamableFile anymore, only saveAt.
+- **Breaking** Passing context is required now.
+- It is possible to pass custom width and height or ask the library to keep the original height and width.
+- It is possible to compress multiple videos.
+- It is possible to pass isStreamable flag to ensure the video is prepared for streaming.
+- OnStart, OnSuccess, OnFailure, OnProgress, and OnCancelled return an index position for the video being compressed, this index matches the order of the urls list passed to the library.
+- OnSuccess returns the new size and the path of the video after compression.
 
 ## How it works
 When the video file is called to be compressed, the library checks if the user wants to set a min bitrate to avoid compressing low resolution videos. This becomes handy if you don’t want the video to be compressed every time it is to be processed to avoid having very bad quality after multiple rounds of compression. The minimum is;
@@ -54,7 +61,7 @@ when {
 }
 ```
 
-You can as well pass custom frameRate and videoBitrate values if you don't want the library to auto-generate the values for you.
+You can as well pass custom videoHeight, videoWidth, frameRate, and videoBitrate values if you don't want the library to auto-generate the values for you. **The compression will fail if height or width is specified without the other, so ensure you pass both values**.
 
 These values were tested on a huge set of videos and worked fine and fast with them. They might be changed based on the project needs and expectations.
 
@@ -88,13 +95,7 @@ implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:${Version.coroutin
 implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:${Version.coroutines}"
 ```
 
-Then just call [VideoCompressor.start()] and pass both source and destination file paths.
-
-**NOTE**: The source video can be provided as a string path or a content uri. If both [srcPath] and
-[srcUri] are provided, [srcUri] will be ignored. Passing [srcUri] requires [context].
-
-**NOTE**: If you want an output video that is optimised to be streamed, ensure you pass [streamableFile] path that is different from the [destPath]. Note
-that both are needed - for now -.
+Then just call [VideoCompressor.start()] and pass context, uris, and saveAt directory name.
 
 The method has a callback for 5 functions;
 1) OnStart - called when compression started
@@ -102,6 +103,13 @@ The method has a callback for 5 functions;
 3) OnFailure - called when an exception occurred or video bitrate and size are below the minimum required for compression.
 4) OnProgress - called with progress new value
 5) OnCancelled - called when the job is cancelled
+
+### Important Notes:
+
+- All the callback functions returns an index for the video being compressed in the same order of the urls passed to the library. You can use this index to update the UI
+or retrieve information about the original uri/file.
+- The source video must be provided as a list of content uris.
+- If you want an output video that is optimised to be streamed, ensure you pass [isStreamable] flag is true.
 
 ### Configuration values
 
@@ -115,6 +123,11 @@ The method has a callback for 5 functions;
 
 - disableAudio: true/false to generate a video without audio. False by default.
 
+- keepOriginalResolution: true/false to tell the library not to change the resolution.
+
+- videoWidth: custom video width.
+
+- videoHeight: custom video height.
 
 To cancel the compression job, just call [VideoCompressor.cancel()]
 
@@ -122,35 +135,30 @@ To cancel the compression job, just call [VideoCompressor.cancel()]
 
 ```kotlin
 VideoCompressor.start(
-   context = applicationContext, // => This is required if srcUri is provided. If not, it can be ignored or null.
-   srcUri = uri, // => Source can be provided as content uri, it requires context.
-   srcPath = path, // => This could be ignored or null if srcUri and context are provided.
-   destPath = desFile.path,
-   streamableFile = streamableFile, /*String, ignore, or null*/
+   context = applicationContext, // => This is required
+   uris = List<Uri>, // => Source can be provided as content uris
+   isStreamable = true,
+   saveAt = Environment.DIRECTORY_MOVIES, // => the directory to save the compressed video(s)
    listener = object : CompressionListener {
-       override fun onProgress(percent: Float) {
+       override fun onProgress(index: Int, percent: Float) {
           // Update UI with progress value
           runOnUiThread {
-             // update a text view
-             progress.text = "${percent.toLong()}%"
-             // update a progress bar
-             progressBar.progress = percent.toInt()
           }
        }
 
-       override fun onStart() {
+       override fun onStart(index: Int) {
           // Compression start
        }
 
-       override fun onSuccess() {
+       override fun onSuccess(index: Int, size: Long, path: String?) {
          // On Compression success
        }
 
-       override fun onFailure(failureMessage: String) {
+       override fun onFailure(index: Int, failureMessage: String) {
          // On Failure
        }
 
-       override fun onCancelled() {
+       override fun onCancelled(index: Int) {
          // On Cancelled
        }
 
@@ -161,6 +169,9 @@ VideoCompressor.start(
       isMinBitrateCheckEnabled = true,
       videoBitrate = 3677198, /*Int, ignore, or null*/
       disableAudio = false, /*Boolean, or ignore*/
+      keepOriginalResolution = false, /*Boolean, or ignore*/
+      videoWidth = 360.0, /*Double, ignore, or null*/
+      videoHeight = 480.0 /*Double, ignore, or null*/
    )
 )
 ```
@@ -168,48 +179,48 @@ VideoCompressor.start(
 
 ```java
  VideoCompressor.start(
-    applicationContext, // => This is required if srcUri is provided. If not, pass null.
-    uri, // => Source can be provided as content uri, it requires context.
-    path, // => This could be null if srcUri and context are provided.
-    desFile.path,
-    streamableFile.path, /*String, or null*/
+    applicationContext, // => This is required
+    new ArrayList<Uri>(), // => Source can be provided as content uris
+    false, // => isStreamable
+    Environment.DIRECTORY_DOWNLOADS, // => the directory to save the compressed video(s)
     new CompressionListener() {
        @Override
-       public void onStart() {
+       public void onStart(int index, long size) {
          // Compression start
        }
 
        @Override
-       public void onSuccess() {
+       public void onSuccess(int index, @Nullable String path) {
          // On Compression success
        }
 
        @Override
-       public void onFailure(String failureMessage) {
+       public void onFailure(int index, String failureMessage) {
          // On Failure
        }
 
        @Override
-       public void onProgress(float v) {
+       public void onProgress(int index, float progressPercent) {
          // Update UI with progress value
          runOnUiThread(new Runnable() {
             public void run() {
-                progress.setText(progressPercent + "%");
-                progressBar.setProgress((int) progressPercent);
            }
          });
        }
 
        @Override
-       public void onCancelled() {
+       public void onCancelled(int index) {
          // On Cancelled
        }
     }, new Configuration(
         VideoQuality.MEDIUM,
         24, /*frameRate: int, or null*/
-        false,
+        false, /*isMinBitrateCheckEnabled*/
         null, /*videoBitrate: int, or null*/
-        false, /*disableAudio: Boolean, or true or false*/
+        false, /*disableAudio: Boolean, or null*/
+        false, /*keepOriginalResolution: Boolean, or null*/
+        360.0, /*videoWidth: Double, or null*/
+        480.0 /*videoHeight: Double, or null*/
     )
 );
 ```
@@ -226,22 +237,15 @@ from within the main thread. Have a look at the example code above for more info
 To report an issue, please specify the following:
 - Device name
 - Android version
-- If the bug/issue exists on the sample app (version 0.9.9) of the library that could be downloaded at this [link](https://drive.google.com/file/d/1x9rtwDIyA3YaokHrthP_kMpxAJNiqZwD/view?usp=sharing).
+- If the bug/issue exists on the sample app (version 1.1.1) of the library that could be downloaded at this [link](https://drive.google.com/file/d/112gWNotTBl-0tp_tvFTyaHxM8Y_UIPIV/view?usp=sharing).
 
 ## Compatibility
 Minimum Android SDK: LightCompressor requires a minimum API level of 21.
 
-## Performance
-This method was tested on Pixel, Huawei, Xiaomi, Samsung and Nokia phones and more than 150 videos.
-Here’s some results from pixel 2 XL (medium quality);
-* 94.3MB compressed to 9.2MB in 11 seconds
-* 151.2MB compressed to 14.7MB in 18 seconds
-* 65.7MB compressed to 6.4MB in 8 seconds
-
 ## How to add to your project?
 #### Gradle
 
-Ensure Kotlin version is `1.5.10`
+Ensure Kotlin version is `1.6.0`
 
 Include this in your Project-level build.gradle file:
 
@@ -263,7 +267,20 @@ Include this in your Module-level build.gradle file:
 ### Groovy
 
 ```groovy
-implementation 'com.github.AbedElazizShe:LightCompressor:1.0.0'
+implementation 'com.github.AbedElazizShe:LightCompressor:1.1.1'
+```
+
+If you're facing problems with the setup, edit settings.gradle by adding this at the beginning of the file:
+
+```
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
 ```
 
 ## Getting help
