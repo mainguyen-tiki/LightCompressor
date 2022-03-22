@@ -19,6 +19,8 @@ import com.abedelazizshe.lightcompressorlibrary.utils.CompressorUtils.setUpMP4Mo
 import com.abedelazizshe.lightcompressorlibrary.utils.CompressorUtils.validateInputs
 import com.abedelazizshe.lightcompressorlibrary.utils.StreamableVideo
 import com.abedelazizshe.lightcompressorlibrary.video.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -139,9 +141,14 @@ object Compressor {
             else configuration.videoBitrate!!
 
         //Handle new width and height values
-        var (newWidth, newHeight) = generateWidthAndHeight(
+        var (newWidth, newHeight) = if (configuration.videoHeight != null) Pair(
+            configuration.videoWidth?.toInt(),
+            configuration.videoHeight?.toInt()
+        )
+        else generateWidthAndHeight(
             width,
-            height
+            height,
+            configuration.keepOriginalResolution
         )
 
         //Handle rotation values and swapping height and width if needed
@@ -157,8 +164,8 @@ object Compressor {
         }
 
         return start(
-            newWidth,
-            newHeight,
+            newWidth!!,
+            newHeight!!,
             destination,
             newBitrate,
             streamableFile,

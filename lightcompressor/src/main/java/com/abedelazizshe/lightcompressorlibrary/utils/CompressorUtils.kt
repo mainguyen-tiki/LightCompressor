@@ -220,8 +220,13 @@ object CompressorUtils {
      */
     fun generateWidthAndHeight(
         width: Double,
-        height: Double
+        height: Double,
+        keepOriginalResolution: Boolean,
     ): Pair<Int, Int> {
+
+        if (keepOriginalResolution) {
+            return Pair(width.roundToInt(), height.roundToInt())
+        }
 
         val newWidth: Int
         val newHeight: Int
